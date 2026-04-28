@@ -33,7 +33,78 @@ class DocumentProcessor:
                 content = chunk.text
                 chunks.append(content)
 
-                metadata = self._create_metadata()
+                metadata = self._create_metadata(
+                    chunk=chunk,
+                    chunk_index=idx,
+                    source_file=Path(file_path).name,
+                    file_type=file_type,
+                    content=content,
+                )
+                metadatas.append(metadata)
+            
+            logger.info(f"Processed {len(chunks)} chunks from {file_path}")
+            return chunks, metadatas
+
         except Exception as e:
-            logger.info(f"Document processing error: {e}")
+            logger.error(f"Document processing error: {e}")
             raise
+
+    def _create_metadata(
+            self,
+            chunk,
+            chunk_index: int,
+            source_file: str,
+            file_type: str,
+            content: str
+    )-> dict:
+        """Create metadata dictionary for chunk"""
+        tokens = len(self.tokenizer.encode(content))
+        chars = len(content)
+        preview = content[:100]+"..." if len(content) > 100 else content
+
+        keywords = self._extract_keywords(content)
+
+        now = datetime.utcnow()
+        metadata = {
+            "chunk_id":f"{source_file}_{chunk_index}",
+            "source_file": source_file,
+            "file_type": file_type,
+            "chunk_index": chunk_index,
+            "total_chunks": -1,
+            "chunk_method": "hybrid",
+            "token_count": tokens,
+            "char_count": chars,
+            "content_preview": preview,
+            "keywords": keywords,
+            "created": now.isoformat(),
+            "processed_at": now.isoformat()
+        }
+        if hasattr(chunk,'meta'):
+            if hasattr(chunk.meta, 'doc_items') and chunk.meta.doc_items:
+                first_item = chunk.meta.doc_items[0]
+                metadata["doc_item_type"]= first_item.label
+                if hasattr(first_item,'prov') and first_item.prov:
+                    metadata['page_number']= first_item.prov[0].page_no
+        
+        return metadata
+
+    def _extract_keywords(
+            self,
+            text: str,
+            max_keywords: int = 5
+    )-> list[str]:
+        """Simple keyword extraction"""
+        words = text.lower().split()
+        stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'}
+        keywords = [w for w in words if len(w)>4 and w not in stop_words]
+        return list(dict.fromkeys(keywords))[:max_keywords]
+    
+    def update_total_chunks(
+            self,
+            metadatas: list[dict],
+    )-> list[dict]:
+        """Update total_chunks field after processing"""
+        total = len(metadatas)
+        for metadata in metadatas:
+            metadata["total_chunks"] = total
+        return metadatas
