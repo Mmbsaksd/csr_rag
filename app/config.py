@@ -8,11 +8,18 @@ class Settings(BaseSettings):
     # Azure OpenAI
     azure_openai_api_key: str
     azure_openai_endpoint: str
-    azure_openai_deployment_name: str
     azure_openai_api_version: str
 
-    # Embeddings
-    azure_openai_embedding_deployment_name: Optional[str] = None
+
+    # Qdrant
+    qdrant_url: str
+    qdrant_api_key: str 
+    qdrant_collection_name: str = "crag_documents"
+
+    #AzureOpenAI Models
+    azure_openai_embedding_deployment_name: str = "text-embedding-3-small"
+    azure_openai_deployment_name: str = "gpt-4o-mini"
+    embedding_dimensions: int = 1536
 
 
 
