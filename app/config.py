@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     azure_openai_deployment_name: str = "gpt-4o-mini"
     embedding_dimensions: int = 1536
 
+    #Upload
+    upload_dir: str = "uploads"
+    max_file_size: int = 50 * 1024 * 1024 #50MB
+
 
 
 @lru_cache
