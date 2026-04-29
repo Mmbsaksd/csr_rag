@@ -45,7 +45,7 @@ class LLMService:
             system_prompt: str = "You are a helpful AI assistant. Always return ONLY valid JSON. No explanations.",
             temperature: float = 0.0,
             max_tokens: int = 1000
-    ) -> dict:
+    ) -> str:
         """Generate with JSON response format"""
         try:
             response = self.client.chat.completions.create(
@@ -59,8 +59,7 @@ class LLMService:
                 response_format={"type": "json_object"}
             )
 
-            content = response.choices[0].message.content
-            return content.strip() if content else {}
+            return response.choices[0].message.content.strip()
         
         except Exception as e:
             logger.error(f"LLM JSON generation error: {e}")
