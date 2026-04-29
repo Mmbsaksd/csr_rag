@@ -125,4 +125,91 @@ class VectorStore:
             search_filter=None
     )-> list:
         """Hybrid search with RRF fusion"""
+
+        sparse_query = self.sparse_service.generate_sparse_vector(query_text)
         
+        return self.client.query_points(
+            collection_name=self.collection_name,
+            prefetch=[
+                Prefetch(query=sparse_query, using='sparse', limit=top_k *3),
+                Prefetch(query=query_vector, using="dense", limit=top_k * 3)
+            ],
+            query=FusionQuery(fusion=Fusion.RRF),
+            query_filter=search_filter,
+            limit=top_k,
+            with_payload=True
+        ).points
+    
+    def search(
+            self,
+            query_vector: list[float],
+            top_k: int = 5,
+            filter_conditions: dict | None = None,
+            mode: str = "hybrid",
+            query_text: str | None = None
+    ) -> list[dict]:
+        """
+        Search for similar chunks using specified mode.
+
+        Args:
+            query_vector: Dense embedding vector
+            top_k: Number of results to return
+            filter_conditions: Optional filter conditions
+            mode: Search mode - "dense", "sparse", or "hybrid" (default)
+            query_text: Original query text (required for sparse/hybrid modes)
+
+        Returns:
+            List of search results with scores and metadata
+        """
+        try:
+            search_filter = None
+            if filter_conditions:
+                pass
+
+            if mode == "dense":
+                results = self.search_dense(query_vector, top_k, search_filter)
+
+            elif mode == "sparse":
+                if not query_text:
+                    raise ValueError("query_text required for sparse search")
+                results = self.search_sparse(query_text, top_k, search_filter)
+            
+            elif mode == "hybrid":
+                if not query_text:
+                    raise ValueError("query_text required for hybrid search")
+                results = self.search_hybrid(query_vector, query_text, top_k, search_filter)
+            
+            else:
+                raise ValueError(f"Invalid search mode: {mode}. Must be 'dense', 'sparse', or 'hybrid'")
+            
+            return [
+                {
+                    "id": hit.id,
+                    "score": hit.score,
+                    "content": hit.payload.get("content"),
+                    "metadata": {k: v for k, v in hit.payload.items() if k != "content"}
+                }
+                for hit in results
+            ]
+
+        except Exception as e:
+            logger.error(f"Search error: {e}")
+            raise
+
+    def delete_by_source(self, source_file: str):
+        """Delete all chunks from a source file"""
+        try:
+            self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=Filter(
+                    must=[
+                        FieldCondition(
+                            key="source_file",
+                            match=MatchValue(value=source_file)
+                        )
+                    ]
+                )
+            )
+        except Exception as e:
+            logger.error(f"Delete error: {e}")
+            raise
