@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     azure_openai_endpoint: str
     azure_openai_api_version: str
 
+    #Tavily
+    tavily_api_key: str
+
 
     # Qdrant
     qdrant_url: str
