@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     # Retrieval
     top_k_results: int=3
 
+    # CRAG Settings
+    crag_relevance_threshold: float = 0.7
+    crag_ambiguous_threshold: float = 0.5
+
 
 
 @lru_cache

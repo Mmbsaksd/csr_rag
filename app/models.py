@@ -38,3 +38,21 @@ class RetrievedChunk(BaseModel):
     content: str
     metadata: ChunkMetadata
     score: float
+
+
+# ============= CRAG Models =============
+
+class CRAGEvaluation(BaseModel):
+    relevance_score: float
+    relevance_label: Literal["relevant", "ambiguous", "irrelevant"]
+    confidence: float
+    evaluation_method: str = "llm_grader"
+    needs_web_search: bool
+    evaluated_at: datetime
+
+
+class CRAGResult(BaseModel):
+    used_web_search: bool
+    evaluation: CRAGEvaluation
+    retrieved_chunks: list[RetrievedChunk]
+    web_results: Optional[list[dict]] = None
