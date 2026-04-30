@@ -56,3 +56,22 @@ class CRAGResult(BaseModel):
     evaluation: CRAGEvaluation
     retrieved_chunks: list[RetrievedChunk]
     web_results: Optional[list[dict]] = None
+
+
+# ============= Self-Reflective Models =============
+
+class ReflectionResult(BaseModel):
+    answer_grounded: bool
+    hallucination_detected: bool
+    sources_cited: list[str]
+    reflection_score: float
+    needs_regeneration: bool
+    reflection_reason: str
+    reflected_at: datetime
+
+
+class SelfReflectiveResult(BaseModel):
+    final_answer: str
+    iterations: int
+    reflection: ReflectionResult
+    retrieved_chunks: list[RetrievedChunk]
