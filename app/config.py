@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     hyde_num_hypotheses: int = 3
     hyde_enabled_by_default: bool = False
 
+    # Retrieval
+    top_k_results: int=3
+
 
 
 @lru_cache
