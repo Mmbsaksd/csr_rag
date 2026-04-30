@@ -41,7 +41,7 @@ class RetrievalService:
 
             hypothesis_vector = self.embedding_service.embed_batch(hypotheses)
 
-            all_result = []
+            all_results = []
 
             for hypothesis, vector in zip(hypotheses, hypothesis_vector):
                 results = self.vector_store.search(
@@ -50,6 +50,76 @@ class RetrievalService:
                     top_k=top_k,
                     mode=search_mode
                 )
-                all_result.append(results)
+                all_results.extend(results)
             
-            retrieved_chunks = 
+            retrieved_chunks = self._merge_and_deduplicate(all_results, top_k)
+
+            logger.info(
+                f"HYDE: Retrieved {len(retrieved_chunks)} unique chunks "
+                f"from {len(hypotheses)} hypotheses"
+            )
+        else:
+            query_vector = self.embedding_service.embed_text(query)
+            results = self.vector_store.search(
+                query_vector=query_vector,
+                query_text=query,
+                top_k=top_k,
+                mode=search_mode
+            )
+            retrieved_chunks = self._convert_to_chunks(results)
+            logger.info(f"Retrieved {len(retrieved_chunks)} chunks for query (mode: {search_mode})")
+
+        return retrieved_chunks
+
+    def _merge_and_deduplicate(
+            self,
+            all_results: list[dict],
+            top_k: int
+    ) -> list[RetrievedChunk]:
+        """
+        Merge results from multiple searches and deduplicate by chunk ID.
+        Preserves the highest score for each unique chunk.
+
+        Args:
+            all_results: Combined results from multiple searches
+            top_k: Number of top chunks to return
+
+        Returns:
+            Deduplicated and sorted list of chunks
+        """
+        chunk_map = {}
+
+        for result in all_results:
+            chunk_id = result["metadata"]["chunk_id"]
+            score = result["score"]
+
+            if chunk_id not in chunk_map or score > chunk_map[chunk_id]["score"]:
+                chunk_map[chunk_id] = result
+
+        unique_chunks = self._convert_to_chunks(list(chunk_map.values()))
+
+        sorted_chunks = sorted(
+            unique_chunks,
+            key=lambda x: x.score,
+            reverse=True
+        )
+        return sorted_chunks[:top_k]
+
+
+    def _convert_to_chunks(self, results: list[dict]) -> list[RetrievedChunk]:
+        """Convert vector store results to RetrievedChunk models"""
+        chunks = []
+        for result in results:
+            chunk = RetrievedChunk(
+                content=result["content"],
+                metadata=ChunkMetadata(**result["metadata"]),
+                score=result["score"]
+            )
+            chunks.append(chunk)
+        return chunks
+    
+    def get_last_hyde_hypotheses(self)-> list[str]| None:
+        """Return hypotheses from last HYDE retrieval for response metadata"""
+        return self._last_hyde_hypotheses
+
+
