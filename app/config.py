@@ -43,6 +43,18 @@ class Settings(BaseSettings):
     reflection_min_score: float = 0.8
     max_reflection_retries: int = 2
 
+    # Reranking Settings
+    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    reranker_initial_top_k: int = 3
+    reranking_enabled_by_default: bool = False
+
+
+    # Reranking Backend Selection
+    reranker_backend: Literal["local", "voyage"] = "local"
+    voyage_api_key: str | None = None
+    voyage_model: str = "rerank-2.5"
+
+
 
 
 
