@@ -33,7 +33,7 @@ Provide a clear, accurate answer."""
         
         system_prompt = "You are a helpful assistant that answers questions based on provided context."
 
-        return self.llm.generate_response(prompt, system_prompt)
+        return self.llm.generate(prompt, system_prompt)
     
     def reflect_on_answer(
         self,
@@ -45,7 +45,7 @@ Provide a clear, accurate answer."""
 
         context = "\n\n".join(
             [
-                f"Document {i+1} {chunk.content}"
+                f"Document {i+1}: {chunk.content}"
                 for i, chunk in enumerate(retrieved_chunks)
             ]
         )
@@ -130,6 +130,47 @@ Criteria:
 
             logger.info(f"Reflection score: {reflection.reflection_score:.2f}, Grounded: {reflection.answer_grounded}")
 
-            if reflection.reflection_score >= 
+            if reflection.reflection_score >= self.settings.reflection_min_score:
+                final_answer = answer
+                final_reflection = reflection
+                logger.info("Self-Reflective: Answer approved")
+                break
 
+            if reflection.needs_regeneration and iterations < max_iterations:
+                logger.info("Self-Reflective: Refining query and retrying")
+                refined_query = self._refine_query(query, reflection)
+                current_chunks = retrieval_function(refined_query)
+            else:
+                final_answer = answer
+                final_reflection = reflection
+                break
 
+        if final_answer is None:
+            final_answer = answer
+            final_reflection = reflection
+
+        return SelfReflectiveResult(
+            final_answer=final_answer,
+            iterations=iterations,
+            reflection=final_reflection,
+            retrieved_chunks=current_chunks
+        )
+    
+    def _refine_query(self, original_query: str, reflection: ReflectionResult)-> str:
+        prompt = f"""The original query didn't retrieve good enough information. Refine the query to get better results.
+
+Original Query: {original_query}
+
+Reflection Feedback: {reflection.reflection_reason}
+
+Provide a refined query that might retrieve more relevant information. Return only the refined query text, nothing else."""
+        
+        system_prompt = "You are a query refinement expert for retrieval systems."
+
+        try:
+            refined = self.llm.generate(prompt, system_prompt, max_tokens=100)
+            logger.info(f"Refined query: {refined}")
+            return refined.strip()
+        except Exception as e:
+            logger.error(f"Query refinement error: {e}")
+            return original_query
