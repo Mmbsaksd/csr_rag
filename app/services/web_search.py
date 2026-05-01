@@ -31,7 +31,7 @@ class WebSearchService:
 
             logger.info(f"Web search returned {len(results)} results")
             return results
-        
+
         except Exception as e:
             logger.error(f"Web search error: {e}")
             return []

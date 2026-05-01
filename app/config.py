@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     crag_relevance_threshold: float = 0.7
     crag_ambiguous_threshold: float = 0.5
 
+    # Self-Reflective Settings
+    reflection_min_score: float = 0.8
+    max_reflection_retries: int = 2
+
+
 
 
 @lru_cache

@@ -35,5 +35,101 @@ Provide a clear, accurate answer."""
 
         return self.llm.generate_response(prompt, system_prompt)
     
-    def reflect_on_answer()
+    def reflect_on_answer(
+        self,
+        query: str,
+        answer: str,
+        retrieved_chunks: list[RetrievedChunk]
+    )-> ReflectionResult:
+        """Reflect on generated answer to check grounding"""
+
+        context = "\n\n".join(
+            [
+                f"Document {i+1} {chunk.content}"
+                for i, chunk in enumerate(retrieved_chunks)
+            ]
+        )
+        prompt = f"""Evaluate if the generated answer is properly grounded in the provided documents.
+
+Query: {query}
+
+Generated Answer:
+{answer}
+
+Source Documents:
+{context}
+
+Analyze and provide evaluation as JSON:
+{{
+    "answer_grounded": <true|false>,
+    "hallucination_detected": <true|false>,
+    "reflection_score": <float 0.0-1.0>,
+    "sources_cited": [<list of document numbers that support the answer>],
+    "reflection_reason": "<explanation>",
+    "needs_regeneration": <true|false>
+}}
+
+Criteria:
+- answer_grounded: Are all claims in the answer supported by the documents?
+- hallucination_detected: Does the answer include information NOT in the documents?
+- reflection_score: Overall quality (1.0 = perfect, 0.0 = completely unsupported)
+- needs_regeneration: Should we retry with refined retrieval?
+"""
+        
+        system_prompt = "You are an answer evaluator for RAG systems. Always respond with valid JSON."
+
+        try:
+            response = self.llm.generate_with_json(prompt, system_prompt)
+            reflection_data = json.loads(response)
+
+            sources_cited = reflection_data.get("sources_cited", [])
+            sources_cited_str = [str(s) for s in sources_cited] if sources_cited else []
+
+            return ReflectionResult(
+                answer_grounded=reflection_data.get("answer_grounded", False),
+                hallucination_detected=reflection_data.get("hallucination_detected", True),
+                sources_cited=sources_cited_str,
+                reflection_score=reflection_data.get("reflection_score", 0.5),
+                needs_regeneration=reflection_data.get("needs_regeneration", True),
+                reflection_reason=reflection_data.get("reflection_reason", "Unknown"),
+                reflected_at=datetime.utcnow()
+            )
+        except Exception as e:
+            logger.error(f"Reflection error: {e}")
+            return ReflectionResult(
+                answer_grounded=False,
+                hallucination_detected=True,
+                sources_cited=[],
+                reflection_score=0.5,
+                needs_regeneration=True,
+                reflection_reason=f"Reflection failed: {str(e)}",
+                reflected_at=datetime.utcnow()
+            )
+        
+    def execute_self_reflective(
+            self,
+            query: str,
+            retrieval_chunks: list[RetrievedChunk],
+            retrieval_function
+    ) -> SelfReflectiveResult:
+        
+        iterations = 0
+        max_iterations = self.settings.max_reflection_retries
+
+        current_chunks = retrieval_chunks
+        final_answer = None
+        final_reflection = None
+
+        while iterations < max_iterations:
+            iterations +=1
+            logger.info(f"Self-Reflective iteration {iterations}")
+
+            answer = self.generate_initial_answer(query, current_chunks)
+
+            reflection = self.reflect_on_answer(query, answer, current_chunks)
+
+            logger.info(f"Reflection score: {reflection.reflection_score:.2f}, Grounded: {reflection.answer_grounded}")
+
+            if reflection.reflection_score >= 
+
 
