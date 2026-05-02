@@ -54,6 +54,13 @@ class Settings(BaseSettings):
     voyage_api_key: str | None = None
     voyage_model: str = "rerank-2.5"
 
+    model_config = SettingsConfigDict(
+    env_file=".env",
+    env_file_encoding="utf-8",
+    extra="ignore",
+)
+
+
 
 
 

@@ -76,7 +76,7 @@ class DocumentProcessor:
             "char_count": chars,
             "content_preview": preview,
             "keywords": keywords,
-            "created": now.isoformat(),
+            "created_at": now.isoformat(),
             "processed_at": now.isoformat()
         }
         if hasattr(chunk,'meta'):
