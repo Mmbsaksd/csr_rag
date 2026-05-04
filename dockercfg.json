@@ -1,0 +1,9 @@
+{
+  "auths": {
+    "https://380610849617.dkr.ecr.us-east-1.amazonaws.com": {
+      "username": "AWS",
+      "password": "PASTE_PASSWORD_FROM_FILE",
+      "email": "none"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+Dockerfile
+.dockerignore
+dockercfg.json
+password.txt
+.env
+.venv/
+.git/
+.github/
+uploads/

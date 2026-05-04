@@ -1,5 +1,6 @@
 # Virtual environment — rebuilt inside Docker via uv
 .venv/
+.venv
 
 # Python bytecode caches
 __pycache__/
