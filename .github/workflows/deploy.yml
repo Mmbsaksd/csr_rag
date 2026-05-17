@@ -1,30 +1,126 @@
-name: Build and Push to ECR
+name: Deploy to AWS Elastic Beanstalk
 
 on:
   push:
     branches:
       - deployment
 
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: crag-rag-app
+  EB_APPLICATION_NAME: crag-rag-appp
+  EB_ENVIRONMENT_NAME: crag-rag-prod
+
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Configure AWS
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to ECR
-        uses: aws-actions/amazon-ecr-login@v2
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses:  aws-actions/amazon-ecr-login@v2
 
-      - name: Build and Push
+      - name: Build and push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t crag-rag-app .
-          docker tag crag-rag-app:latest 380610849617.dkr.ecr.us-east-1.amazonaws.com/crag-rag-app:latest
-          docker push 380610849617.dkr.ecr.us-east-1.amazonaws.com/crag-rag-app:latest
+          docker build --platform linux/amd64 \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+
+      - name: Deploy to Elastic Beanstalk
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_API_VERSION: ${{ secrets.AZURE_OPENAI_API_VERSION }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_DEPLOYMENT_NAME: ${{ secrets.AZURE_OPENAI_DEPLOYMENT_NAME }}
+          AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: ${{ secrets.AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME }}
+
+
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+
+          QDRANT_URL: ${{ secrets.QDRANT_URL }}
+          QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
+
+          RERANKER_BACKEND: ${{ secrets.RERANKER_BACKEND }}
+
+          UPLOAD_DIR: ${{ secrets.UPLOAD_DIR }}
+        
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          S3_BUCKET="elasticbeanstalk-${AWS_REGION}-${ACCOUNT_ID}"
+          VERSION_LABEL="app-${IMAGE_TAG:0:8}-$(date +%Y%m%d%H%M%S)"
+
+          zip -r deploy.zip Dockerrun.aws.json
+
+          aws s3 cp deploy.zip "s3://${S3_BUCKET}/${EB_APPLICATION_NAME}/${VERSION_LABEL}.zip"
+
+          aws elasticbeanstalk create-application-version \
+            --application-name "$EB_APPLICATION_NAME" \
+            --version-label "$VERSION_LABEL" \
+            --source-bundle "S3Bucket=${S3_BUCKET},S3Key=${EB_APPLICATION_NAME}/${VERSION_LABEL}.zip"
+
+          python3 -c "
+          import json, os
+          ns = 'aws:elasticbeanstalk:application:environment'
+          keys = [
+              'AZURE_OPENAI_API_KEY',
+              'AZURE_OPENAI_ENDPOINT',
+              'AZURE_OPENAI_API_VERSION',
+              'AZURE_OPENAI_DEPLOYMENT_NAME',
+              'AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME',
+              'RERANKER_BACKEND',
+              'UPLOAD_DIR',
+              'TAVILY_API_KEY',
+              'QDRANT_URL',
+              'QDRANT_API_KEY'
+          ]
+          settings = [{'Namespace': ns, 'OptionName': k, 'Value': os.environ[k]} for k in keys]
+          print(json.dumps(settings))
+          " > /tmp/eb-env-settings.json
+
+          aws elasticbeanstalk update-environment \
+            --environment-name "$EB_ENVIRONMENT_NAME" \
+            --version-label "$VERSION_LABEL" \
+            --option-settings file:///tmp/eb-env-settings.json
+
+          
+          # Poll until Ready — aws wait has a hardcoded ~6.5 min limit; EB deploys can take longer
+          echo "Waiting for environment to reach Ready status (up to 20 min)..."
+
+          for i in $(seq 1 40); do
+            STATUS=$(aws elasticbeanstalk describe-environments \
+              --environment-names "$EB_ENVIRONMENT_NAME" \
+              --query 'Environments[0].Status' \
+              --output text)
+            HEALTH=$(aws elasticbeanstalk describe-environments \
+              --environment-names "$EB_ENVIRONMENT_NAME" \
+              --query 'Environments[0].Health' \
+              --output text)
+        
+            if [ "$STATUS" = "Ready" ]; then
+              echo "  [$i/40] Status=$STATUS Health=$HEALTH — Deployment successful!"
+              break
+            elif [ "$HEALTH" = "Green" ]; then
+              echo "  [$i/40] Status=$STATUS Health=$HEALTH — Instance healthy, rollout finishing..."
+            else
+              echo "  [$i/40] Status=$STATUS Health=$HEALTH"
+            fi
+            [ $i -eq 40 ] && echo "Timed out waiting for environment to be Ready." && exit 1
+            sleep 30
+          done
+
+          
